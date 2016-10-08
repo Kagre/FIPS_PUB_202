@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+
+<head><script src="mySHA3.js"></script></head>
+
+<body>
+
+<h1>FIPS PUB 202 JavaScript Implementation</h1>
+
+<p>
+Resources:
+<ul>
+<li><a href="http://keccak.noekeon.org/specs_summary.html">http://keccak.noekeon.org/specs_summary.html</a></li>
+<li><a href="http://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf">FIPS PUB 202</a></li>
+<li><a href="http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing">Official Examples</a> (Note: don't look at FIPS 180-2 examples, in the same section, they're for a different hash)</li>
+</ul>
+</p>
+
+<form name="params">
+Text to Hash: <input type="text" name="toHash" value="The quick brown fox jumps over the lazy dog" size=80><br>
+<span id="OutBitsBox" style="display:none">Output Bit Length: <input type="text" name="bitLen" value="224"></span><br>
+<fieldset>
+<legend>Select Algorithm</legend>
+<table><tr>
+<td>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHA3_224" checked> SHA3 224<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHA3_256"> SHA3 256<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHA3_384"> SHA3 384<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHA3_512"> SHA3 512<br>
+</td><td valign="top">
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHAKE128"> SHAKE128<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHAKE256"> SHAKE256<br>
+</td><td valign="top">
+<input type="radio" name="algo" onchange="UpdateDisp()" value="RawSHAKE128"> RawSHAKE128<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="RawSHAKE256"> RawSHAKE256<br>
+</td>
+</tr></table>
+Display Round Details: <input type="checkbox" name="detailed"><br>
+</fieldset>
+<button type="button" onclick="HashFormData()">Get Hash</button>
+<button type="button" onclick="log.innerHTML='';">Clear</button>
+</form>
+<hr>
+<p id="log"></p>
+
+<script>
+var log=document.getElementById("log");
+function LogIt(str){
+   log.innerHTML += str.replace(/\n/g,"<br>")+"<br>";
+}
+
+function UpdateDisp(){
+   document.getElementById("OutBitsBox").style=(document.forms["params"]["algo"].value.substr(0,4)=='SHA3')?"display:none":"";
+   //LogIt('UpdateDisp('+document.forms["params"]["algo"].value.substr(0,4)+')');
+   //LogIt('UpdateDisp('+(document.forms["params"]["detailed"].checked==true)+')');
+}
+
+function HashFormData(){
+   var frm=document.forms["params"],
+       algo=frm['algo'].value,
+       toHash=frm['toHash'].value;
+   dbg=(frm['detailed'].checked==true);
+   if(algo.substr(0,4)=='SHA3'){
+      LogIt(algo + "('"+toHash+"')");
+      LogIt('<span style="font-family:Courier New">'+toHash[algo]()+'</span>');
+   }else{
+      LogIt(algo + "('"+toHash+"', "+frm['bitLen'].value+")");
+      LogIt('<span style="font-family:Courier New">'+toHash[algo](frm['bitLen'].value)+'</span>');
+   }
+}
+
+//LogIt(b2h([0,0,0,0,0,1,1,0]));
+//LogIt(BitsToHex([0,0,0,0,0,1,1,0]));
+
+/* Usage Examples
+LogIt('SHA3_224([])\n'+SHA3_224([]));
+LogIt('SHA3_256([])\n'+SHA3_256([]));
+LogIt('SHA3_384([])\n'+SHA3_384([]));
+LogIt('SHA3_512([])\n'+SHA3_512([]));
+LogIt('SHAKE128([],256)\n'+SHAKE128([],256));
+LogIt('SHAKE256([],512)\n'+SHAKE256([],512));
+LogIt('SHAKE128("The quick brown fox jumps over the lazy dog",256)\n'+SHAKE128("The quick brown fox jumps over the lazy dog".toUTF8ByteArray(), 256));
+
+LogIt('<span style="font-family:Courier New">'+('test'.SHA3_224())+'</span>');
+*/
+</script>
+
+<hr>
+<p>
+Copyright 2016 Gregory Kaiser<br>
+<br>
+This file is part of my FIPS_PUB_202 libarary.<br>
+<br>
+My FIPS_PUB_202 library is free software: you can redistribute it and/or modify<br>
+it under the terms of the GNU General Public License as published by<br>
+the Free Software Foundation, either version 3 of the License, or<br>
+(at your option) any later version.<br>
+<br>
+My FIPS_PUB_202 library is distributed in the hope that it will be useful,<br>
+but WITHOUT ANY WARRANTY; without even the implied warranty of<br>
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the<br>
+GNU General Public License for more details.<br>
+<br>
+You should have received a copy of the GNU General Public License<br>
+along with my FIPS_PUB_202 library.  If not, see <a href="http://www.gnu.org/licenses/">http://www.gnu.org/licenses/</a>.<br>
+</p>
+
+</body>
+</html>
