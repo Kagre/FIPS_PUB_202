@@ -84,6 +84,17 @@ String.prototype.SHAKE256=function(d){return b2h(Keccak(512,this.toUTF8ByteArray
 String.prototype.RawSHAKE128=function(d){return b2h(Keccak(256,this.toUTF8ByteArray(),[1,1],d));}
 String.prototype.RawSHAKE256=function(d){return b2h(Keccak(512,this.toUTF8ByteArray(),[1,1],d));}
 
+var SHA3_reflector={
+   'SHA3_224':SHA3_224,
+   'SHA3_256':SHA3_256,
+   'SHA3_384':SHA3_384,
+   'SHA3_512':SHA3_512,
+   'SHAKE128':SHAKE128,
+   'SHAKE256':SHAKE256,
+   'RawSHAKE128':RawSHAKE128,
+   'RawSHAKE256':RawSHAKE256
+};
+
 function bitStringToState(S){
    var A=[],w=S.length/25,i,j,k;
    for(i=0;i<5;i++){
