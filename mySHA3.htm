@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+/*
+wikkipedia.SHA3-224("")  6b4e03423667dbb73b6e15454f0eb1abd4597f9a1b078e3f5b5a6bc7
+SHA3_224([]);            6b4e03423667dbb73b6e15454f0eb1abd4597f9a1b078e3f5b5a6bc7
+
+  Notation:
+     b [25,50,100,200,400,800,1600] width of permutation
+     w [1,2,4,8,16,32,64]           lane length
+     l=log2(w) [0,1,2,3,4,5,6]
+     nr = 12+2l where 2^l=w [12,14,16,18,20,22,24] number of rounds
+     RC                             round constant
+
+
+b 25 50 100 200 400 800 1600 Bits
+w 1  2  4   8   16  32  64   b/(5x5)
+l 0  1  2   3   4   5   6    log2(b/25)
+
+*/
+var dbg=false;
+
+String.prototype.toUTF8ByteArray=function(){
+   return this.split("").map(function(cv){return cv.charCodeAt(0);});
+};
+Array.prototype.fromUTF8ByteArray=function(){
+   return this.map(function(cv){return String.fromCharCode(cv);}).join("");
+};
+
+Array.prototype.xor=function(B){
+   //assumed: A and B are same length with no undefined elements.
+   return this.map(function(cv,ndx){return cv^B[ndx];});
+};
+
+Number.prototype.toBits=function(w){
+   var ret=this.toString(2).split('');
+   if(w===undefined)return ret;
+   return zString(w-ret.length).split('').concat(ret);
+};
+
+//assumed: M is a byte vector
+function SHA3_224(M){return b2h(Keccak(448,M,[0,1],224));}
+function SHA3_256(M){return b2h(Keccak(512,M,[0,1],256));}
+function SHA3_384(M){return b2h(Keccak(768,M,[0,1],384));}
+function SHA3_512(M){return b2h(Keccak(1024,M,[0,1],512));}
+
+function SHAKE128(M,d){return b2h(Keccak(256,M,[1,1,1,1],d));}
+function SHAKE256(M,d){return b2h(Keccak(512,M,[1,1,1,1],d));}
+
+function RawSHAKE128(J,d){return b2h(Keccak(256,J,[1,1],d));}
+function RawSHAKE256(J,d){return b2h(Keccak(512,J,[1,1],d));}
+
+String.prototype.SHA3_224=function(){return b2h(Keccak(448,this.toUTF8ByteArray(),[0,1],224));}
+String.prototype.SHA3_256=function(){return b2h(Keccak(512,this.toUTF8ByteArray(),[0,1],256));}
+String.prototype.SHA3_384=function(){return b2h(Keccak(768,this.toUTF8ByteArray(),[0,1],384));}
+String.prototype.SHA3_512=function(){return b2h(Keccak(1024,this.toUTF8ByteArray(),[0,1],512));}
+
+String.prototype.SHAKE128=function(d){return b2h(Keccak(256,this.toUTF8ByteArray(),[1,1,1,1],d));}
+String.prototype.SHAKE256=function(d){return b2h(Keccak(512,this.toUTF8ByteArray(),[1,1,1,1],d));}
+
+String.prototype.RawSHAKE128=function(d){return b2h(Keccak(256,this.toUTF8ByteArray(),[1,1],d));}
+String.prototype.RawSHAKE256=function(d){return b2h(Keccak(512,this.toUTF8ByteArray(),[1,1],d));}
+
+function bitStringToState(S){
+   var A=[],w=S.length/25,i,j,k;
+   for(i=0;i<5;i++){
+      A[i]=[];
+      for(j=0;j<5;j++){
+         A[i][j]=[];
+         for(k=0;k<w;k++)A[i][j].push(S[w*(5*j+i)+k]);
+      }
+   }
+   return A;
+}
+function StateToBitString(A){
+   var S=[],w=A[0][0].length,i,j,k;
+   for(j=0;j<5;j++){
+      for(i=0;i<5;i++){
+         for(k=0;k<w;k++)S.push(A[i][j][k]);
+      }
+   }
+   return S;
+}
+
+//wrapper function to 1600 KECCAK
+//  c   -- capacity N^r.0^c
+//  N   -- Message
+//  dom -- domain selection used in SHA3
+//  d   -- ouput bit length
+function Keccak(c,N,dom,d){
+   var b=1600;
+   return Sponge(
+      function(S){return StateToBitString(KECCAK_f(b,bitStringToState(S)));},b,
+      pad101,
+      b-c,
+      N,dom,
+      d
+   );
+}
+
+//SPONGE[f, pad, r](N, d)
+//   f    -- underlying function maps b bits to b bits
+//   b    -- b associated bit length of f
+//   pad  -- padding rule, pad message to mod r bit length
+//   r    -- bit rate, partition size of the message
+//   N    -- message, byte vector
+//   dom  -- message domain postfix, bit vector
+//   d    -- output bit length
+function Sponge(f,b,pad,r,N,dom,d){
+   var buff=[]; // bit vector buffer
+   
+   // I know pullBits is convoluted, but its concept is a lot simpler than its implementation
+   // the point behind pullBits is that you have a single source to pull the message bits from
+   //    pullBits = N || dom || pad101
+   var pullBits=(function(){
+      var Nlen=N.length, Nndx=0; // current position in N byte vector
+      return function(){
+         if(Nndx==Nlen){
+            pullBits=(function(){
+               var Pdng=pad(r,Nlen*8+dom.length); // bit vector
+               return function(){
+                  return Pdng.splice(0,r-buff.length);
+               };
+            })();
+            return dom;
+         }
+         return N[Nndx++].toBits(8).reverse();
+      };
+   })();
+
+   //absorbing
+   var c=b-r,tmp;
+   var S=zString(b).split(''); // bit vector initalized to 00*0
+   while(true){
+      do{
+         tmp=pullBits();
+         buff=buff.concat(tmp);
+      }while(buff.length<r && tmp.length!=0);
+      if(buff.length<r)break;
+tmp=buff.splice(0,r).concat(zString(c).split(''));
+      S=f(S.xor(tmp));
+   }
+
+   //squeezing
+   var Z=[];
+   while(true){
+      Z=Z.concat(S.slice(0,r));
+      if(Z.length>=d)break; // break early to not over-run computationally heavy f(S)
+      S=f(S);
+   }
+   return Z.slice(0,d);
+}
+
+//wrapper for a specific family of KECCAK functions
+function KECCAK_f(b,A){
+   var nr={25:12,50:14,100:16,200:18,400:20,800:22,1600:24}[b];
+   if(nr===undefined)return undefined;
+   return KECCAK_p(b,nr,A);
+}
+// b   -- bit length must be in [25, 50, 100, 200, 400, 800, 1600]
+// nr  -- number of rounds
+// A   -- input state
+function KECCAK_p(b,nr,A){
+/*   var RC=[
+      new uint64(0x00000000,0x00000001),new uint64(0x00000000,0x8000808B),
+      new uint64(0x00000000,0x00008082),new uint64(0x80000000,0x0000008B),
+      new uint64(0x80000000,0x0000808A),new uint64(0x80000000,0x00008089),
+      new uint64(0x80000000,0x80008000),new uint64(0x80000000,0x00008003),
+      new uint64(0x00000000,0x0000808B),new uint64(0x80000000,0x00008002),
+      new uint64(0x00000000,0x80000001),new uint64(0x80000000,0x00000080),
+      new uint64(0x80000000,0x80008081),new uint64(0x00000000,0x0000800A),
+      new uint64(0x80000000,0x00008009),new uint64(0x80000000,0x8000000A),
+      new uint64(0x00000000,0x0000008A),new uint64(0x80000000,0x80008081),
+      new uint64(0x00000000,0x00000088),new uint64(0x80000000,0x00008080),
+      new uint64(0x00000000,0x80008009),new uint64(0x00000000,0x80000001),
+      new uint64(0x00000000,0x8000000A),new uint64(0x80000000,0x80008008)
+   ];*/
+   var w={25:1,50:2,100:4,200:8,400:16,800:32,1600:64}[b];
+   if(w===undefined)return undefined;
+   var retA=A,ir;
+   for(ir=0;ir<nr;ir++)
+      retA=Round(w,retA,ir);
+   return retA;
+}
+
+function Round(w,A,ir){
+   var LaneNdx=(function(){
+      var MAX=Math.floor(0x7FffFFff/w)*w;
+      return function(z){
+         if(z<0)return (z+MAX)%w;
+         return z%w;
+      };
+   })();
+   var ndx=function(n){
+      //0X7FFFFFFD % 5 =0
+      if(n<0) return (n+0x7FffFFfd)%5;
+      return n%5;
+   }
+
+   var i,j,k;
+   if(dbg){
+      LogIt('Round: '+ir+' A.length:'+A.length+' A[0].length:'+A[0].length+' A[0][0].length:'+A[0][0].length);
+      LogIt('A:\n<span style="font-family:Courier New">'+b2h(StateToBitString(A))+'</span>');
+   }
+   //Theta
+   var C=[],D=[],ThetaA=[];
+   for(i=0;i<5;i++){
+      C[i]=[];
+      for(k=0;k<w;k++){
+         C[i].push(A[i][0][k]^A[i][1][k]^A[i][2][k]^A[i][3][k]^A[i][4][k]);
+      }
+   }
+   for(i=0;i<5;i++){
+      D[i]=[];
+      for(k=0;k<w;k++){
+         D[i].push(C[ndx(i-1)][k]^C[ndx(i+1)][LaneNdx(k-1)]);
+      }
+   }
+   for(i=0;i<5;i++){
+      ThetaA[i]=[];
+      for(j=0;j<5;j++){
+         ThetaA[i][j]=[];
+         for(k=0;k<w;k++){
+            ThetaA[i][j].push(A[i][j][k]^D[i][k]);
+         }
+      }
+   }
+   if(dbg)LogIt('ThetaA:\n<span style="font-family:Courier New">'+b2h(StateToBitString(ThetaA))+'</span>');
+
+   //rho
+   var RhoA=initState(w);
+   for(k=0;k<w;k++)RhoA[0][0][k]=ThetaA[0][0][k];
+   var x=1,y=0,t,tmpX;
+   for(t=0;t<24;t++){
+      for(k=0;k<w;k++)RhoA[x][y][k]=ThetaA[x][y][LaneNdx(k-(t+1)*(t+2)/2)];
+      tmpX=x;x=y;y=ndx(2*tmpX+3*y);
+   }
+   if(dbg)LogIt('RhoA:\n<span style="font-family:Courier New">'+b2h(StateToBitString(RhoA))+'</span>');
+
+   //pi
+   var PiA=[];
+   for(i=0;i<5;i++){
+      PiA[i]=[];
+      for(j=0;j<5;j++){
+         PiA[i][j]=[];
+         for(k=0;k<w;k++)PiA[i][j].push(RhoA[ndx(i+3*j)][i][k]);
+      }
+   }
+   if(dbg)LogIt('PiA:\n<span style="font-family:Courier New">'+b2h(StateToBitString(PiA))+'</span>');
+
+   //chi
+   var ChiA=[];
+   for(i=0;i<5;i++){
+      ChiA[i]=[];
+      for(j=0;j<5;j++){
+         ChiA[i][j]=[];
+         for(k=0;k<w;k++)ChiA[i][j].push(PiA[i][j][k]^((PiA[ndx(i+1)][j][k]^1)&PiA[ndx(i+2)][j][k]));
+      }
+   }
+   if(dbg)LogIt('ChiA:\n<span style="font-family:Courier New">'+b2h(StateToBitString(ChiA))+'</span>');
+
+   //iota
+   var rc=function(t){
+      if(t%255==0)return 1;
+      var R=[1,0,0,0,0,0,0,0],i,mx;
+      for(i=1,mx=t%255;i<=mx;i++){
+         R=[0].concat(R);
+         R[0]^=R[8];
+         R[4]^=R[8];
+         R[5]^=R[8];
+         R[6]^=R[8];
+         R=R.slice(0,8);
+      }
+      return R[0];
+   };
+   var IotaA=[],RC=[],l;
+   for(i=0;i<5;i++){
+      IotaA[i]=[];
+      for(j=0;j<5;j++){
+         IotaA[i][j]=[];
+         for(k=0;k<w;k++)IotaA[i][j].push(ChiA[i][j][k]);
+      }
+   }
+   RC=zString(w).split('');
+   for(j=0,l={1:0,2:1,4:2,8:3,16:4,32:5,64:6}[w];j<=l;j++)
+      RC[(1<<j)-1]=rc(j+7*ir);
+   for(k=0;k<w;k++)IotaA[0][0][k]=IotaA[0][0][k]^RC[k];
+   if(dbg)LogIt('IotaA:\n<span style="font-family:Courier New">'+b2h(StateToBitString(IotaA))+'</span>');
+
+   return IotaA;
+}
+
+/*var r=(function(){
+   var a=[
+      [ 0, 1,62,28,27],
+      [36,44, 6,55,20],
+      [ 3,10,43,25,39],
+      [41,45,15,21, 8],
+      [18, 2,61,56,14]
+   ];
+   return function(x,y,bits){
+      var b=(bits===undefined)?64:bits;
+   };
+})();*/
+
+if(String.prototype.repeat===undefined){
+   String.prototype.repeat=function(len){
+      if (this=='') return '';
+      if(len===undefined)return '';
+      if(len<0)return '';
+      var i=0,z=this;
+      var ret='';
+      for(i=len;i>0;i>>=1){
+         if(i&1)ret+=z;
+         z+=z;
+      }
+      return ret;
+   };
+}
+
+function zString(len){
+   if(len===undefined)return '';
+   if(len<0)return '';
+   return '0'.repeat(len);
+}
+
+/* String.repeat() not defined in IE
+// Old code use repeat() above
+var zString=(function(){
+   var zedList=['','0','00','000','0000','00000','000000','0000000','00000000'];
+   return function(len){
+      if(len===undefined)return '';
+      if(len<0)return '';
+      var i=0,z='0';
+      if(zedList[len]===undefined){
+         zedList[len]='';
+         for(i=len;i>0;i>>=1){
+            if(i&1)zedList[len]+=z;
+            z+=z;
+         }
+      }
+      return zedList[len];
+   };
+})();
+*/
+
+var pad101=function(x,m){
+   var MAX=Math.floor(0x7FffFFff/x)*x;
+   var j=(MAX-m-2)%x;
+   if(j==0) return [1,1];
+   return [1].concat(zString(j).split(''),[1]);
+}
+
+function initState(w){
+   var A=[],i,j,k;
+   for(i=0;i<5;i++){
+      A[i]=[];
+      for(j=0;j<5;j++){
+         A[i][j]=[];
+         for(k=0;k<w;k++){
+            A[i][j].push(0);
+         }
+      }
+   }
+   return A;
+}
+
+function BitsToHex(S){
+   var i,len,ret='';
+   for(i=0,len=S.length;i<len;i+=4){
+      ret+=parseInt(S.slice(i,i+4).join(''),2).toString(16);
+   }
+   return ret;
+}
+
+//Algo 10
+function h2b(H,n){
+   var len=H.length;
+   var i,m,h,T=[];
+   for(i=0,m=len/2;i<m;i++){
+      h=16*parseInt(H.charAt(i*2),16)+parseInt(H.charAt(i*2+1),16);
+      T=T.concat(h.toBits(8).reverse());
+   }
+   if(n===undefined)return T;
+   return T.slice(0,n);
+}
+
+//Algo 11
+function b2h(S){
+   var T=S.concat(zString((0x7FFFFFF8-S.length)%8).split(''));
+   var m=Math.ceil(S.length/8);
+   var i,h,H='';
+   for(i=0;i<m;i++){
+      h=parseInt(T.splice(0,8).reverse().join(''),2);
+      H+=((i%16==0&&i!=0)?'\n':'')+((h<16)?'0':'')+h.toString(16)+' ';
+   }
+   return H;
+}
+
+function LogIt(str){
+   log.innerHTML += str.replace(/\n/g,"<br>")+"<br>";
+}
+
+function UpdateDisp(){
+   document.getElementById("OutBitsBox").style=(document.forms["params"]["algo"].value.substr(0,4)=='SHA3')?"display:none":"";
+   //LogIt('UpdateDisp('+document.forms["params"]["algo"].value.substr(0,4)+')');
+   //LogIt('UpdateDisp('+(document.forms["params"]["detailed"].checked==true)+')');
+}
+
+function HashFormData(){
+   var frm=document.forms["params"],
+       algo=frm['algo'].value,
+       toHash=frm['toHash'].value;
+   dbg=(frm['detailed'].checked==true);
+   if(algo.substr(0,4)=='SHA3'){
+      LogIt(algo + "('"+toHash+"')");
+      LogIt('<span style="font-family:Courier New">'+toHash[algo]()+'</span>');
+   }else{
+      LogIt(algo + "('"+toHash+"', "+frm['bitLen'].value+")");
+      LogIt('<span style="font-family:Courier New">'+toHash[algo](frm['bitLen'].value)+'</span>');
+   }
+}
+</script>
+</head>
+<body>
+
+<h1>FIPS PUB 202 JavaScript Implementation</h1>
+
+<p>
+Resources:
+<ul>
+<li><a href="http://keccak.noekeon.org/specs_summary.html">http://keccak.noekeon.org/specs_summary.html</a></li>
+<li><a href="http://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf">FIPS PUB 202</a></li>
+<li><a href="http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing">Official Examples</a> (Note: don't look at FIPS 180-2 examples, in the same section, they're for a different hash)</li>
+</ul>
+</p>
+
+<form name="params">
+Text to Hash: <input type="text" name="toHash" value="The quick brown fox jumps over the lazy dog" size=80><br>
+<span id="OutBitsBox" style="display:none">Output Bit Length: <input type="text" name="bitLen" value="224"></span><br>
+<fieldset>
+<legend>Select Algorithm</legend>
+<table><tr>
+<td>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHA3_224" checked> SHA3 224<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHA3_256"> SHA3 256<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHA3_384"> SHA3 384<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHA3_512"> SHA3 512<br>
+</td><td valign="top">
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHAKE128"> SHAKE128<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="SHAKE256"> SHAKE256<br>
+</td><td valign="top">
+<input type="radio" name="algo" onchange="UpdateDisp()" value="RawSHAKE128"> RawSHAKE128<br>
+<input type="radio" name="algo" onchange="UpdateDisp()" value="RawSHAKE256"> RawSHAKE256<br>
+</td>
+</tr></table>
+Display Round Details: <input type="checkbox" name="detailed"><br>
+</fieldset>
+<button type="button" onclick="HashFormData()">Get Hash</button>
+<button type="button" onclick="log.innerHTML='';">Clear</button>
+</form>
+<hr>
+<p id="log"></p>
+
+<script>
+var log=document.getElementById("log");
+
+//LogIt(b2h([0,0,0,0,0,1,1,0]));
+//LogIt(BitsToHex([0,0,0,0,0,1,1,0]));
+
+/* Usage Examples
+LogIt('SHA3_224([])\n'+SHA3_224([]));
+LogIt('SHA3_256([])\n'+SHA3_256([]));
+LogIt('SHA3_384([])\n'+SHA3_384([]));
+LogIt('SHA3_512([])\n'+SHA3_512([]));
+LogIt('SHAKE128([],256)\n'+SHAKE128([],256));
+LogIt('SHAKE256([],512)\n'+SHAKE256([],512));
+LogIt('SHAKE128("The quick brown fox jumps over the lazy dog",256)\n'+SHAKE128("The quick brown fox jumps over the lazy dog".toUTF8ByteArray(), 256));
+
+LogIt('<span style="font-family:Courier New">'+('test'.SHA3_224())+'</span>');
+*/
+</script>
+
+<hr>
+<p>
+Copyright 2016 Gregory Kaiser<br>
+<br>
+This file is part of my FIPS_PUB_202 libarary.<br>
+<br>
+My FIPS_PUB_202 library is free software: you can redistribute it and/or modify<br>
+it under the terms of the GNU General Public License as published by<br>
+the Free Software Foundation, either version 3 of the License, or<br>
+(at your option) any later version.<br>
+<br>
+My FIPS_PUB_202 library is distributed in the hope that it will be useful,<br>
+but WITHOUT ANY WARRANTY; without even the implied warranty of<br>
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the<br>
+GNU General Public License for more details.<br>
+<br>
+You should have received a copy of the GNU General Public License<br>
+along with my random-code library.  If not, see <a href="http://www.gnu.org/licenses/">http://www.gnu.org/licenses/</a>.<br>
+</p>
+
+</body>
+</html>
