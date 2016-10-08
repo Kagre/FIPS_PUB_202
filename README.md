@@ -1,7 +1,7 @@
 # FIPS_PUB_202
 Full implementation of FIPS PUB 202 in JavaScript
 
-This is more of an academic implementation than a cryptographically secure and/or bench marking model. I did not take into account operations which run in uniform time, and consolidating the bit vectors into 32 or 64 bit arithmetic.
+This is more of an academic implementation than a cryptographically secure and/or bench marking model. I did not take into account operations which run in uniform time, and consolidating the bit vectors into 32 or 64 bit arithmetic. However the detailed output should track byte for byte to the example files given on the NIST web page <a href="http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing">here</a>.
 
 Main functions: SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE128, SHAKE256, RawSHAKE128, RawSHAKE256
 
