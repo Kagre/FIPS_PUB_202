@@ -55,6 +55,19 @@ function UpdateDisp(){
    //LogIt('UpdateDisp('+(document.forms["params"]["detailed"].checked==true)+')');
 }
 
+function TastesLikeHex(str){
+   var rep=str.replace(/[hx\s]/ig,'');
+   var h=rep.replace(/[0123456789abcdef]/ig,'');
+   return rep.length/str.length>=0.4 && h.length/rep.length <= 0.23;
+}
+
+function parseHexBytes(str){
+   var hxDigits=str.replace(/0x/ig,'').replace(/[^0123456789abcdef]/ig,'');
+   var a=[];
+   for(var i=0,dLen=hxDigits.length;i<dLen;i+=2)a.push(parseInt(hxDigits.substr(i,2),16));
+   return a;
+}
+
 function HashFormData(){
    var frm=document.forms["params"],
        algo=frm['algo'].value,
@@ -62,12 +75,32 @@ function HashFormData(){
    dbg=(frm['detailed'].checked==true);
    if(algo.substr(0,4)=='SHA3'){
       LogIt(algo + "('"+toHash+"')");
-      LogIt('<span style="font-family:Courier New">'+toHash[algo]()+'</span>');
+      if(TastesLikeHex(toHash))
+           LogIt('<span style="font-family:Courier New">'+SHA3_reflector[algo](parseHexBytes(toHash))+'</span>');
+      else LogIt('<span style="font-family:Courier New">'+toHash[algo]()+'</span>');
    }else{
       LogIt(algo + "('"+toHash+"', "+frm['bitLen'].value+")");
-      LogIt('<span style="font-family:Courier New">'+toHash[algo](frm['bitLen'].value)+'</span>');
+      if(TastesLikeHex(toHash))
+           LogIt('<span style="font-family:Courier New">'+SHA3_reflector[algo](parseHexBytes(toHash),frm['bitLen'].value)+'</span>');
+      else LogIt('<span style="font-family:Courier New">'+toHash[algo](frm['bitLen'].value)+'</span>');
    }
 }
+
+var Example1600=
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3 a3"+
+   "a3 a3 a3 a3 a3 a3 a3 a3";
+//dbg=true;LogIt('<span style="font-family:Courier New">'+SHA3_224(parseHexBytes(Example1600))+'</span>');
 
 //LogIt(b2h([0,0,0,0,0,1,1,0]));
 //LogIt(BitsToHex([0,0,0,0,0,1,1,0]));
