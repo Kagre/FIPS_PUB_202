@@ -8,8 +8,11 @@ Main functions: SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE128, SHAKE256, RawS
 Typical Usage within JavaScript:
 ```JavaScript 
 SHA3_224("test".toUTF8ByteArray());
+
 "test".SHA3_224();
+
 SHAKE128([],256));
+
 "".SHAKE128(256);
 ```
 
