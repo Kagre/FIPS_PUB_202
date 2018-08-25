@@ -6,23 +6,12 @@ This is more of an academic implementation than a cryptographically secure and/o
 Main functions: SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE128, SHAKE256, RawSHAKE128, RawSHAKE256
 
 Typical Usage within JavaScript:
-<ul><li>
 ```JavaScript 
 SHA3_224("test".toUTF8ByteArray());
-```
-</li><li>
-```JavaScript 
 "test".SHA3_224();
-```
-</li><li>
-```JavaScript 
 SHAKE128([],256));
-```
-</li><li>
-```JavaScript 
 "".SHAKE128(256);
 ```
-</li>
 
 Auxillary functions: String.prototype.toUTF8ByteArray, Array.prototype.fromUTF8ByteArray, Array.prototype.xor, Number.prototype.toBits, bitStringToState, StateToBitString, Keccak, Sponge, KECCAK_f, KECCAK_p, Round, String.prototype.repeat if it doesn't already exist, zString, pad101, initState, BitsToHex, h2b, b2h
 
